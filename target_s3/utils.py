@@ -8,8 +8,8 @@ import re
 import collections
 import inflection
 import itertools
-
 from decimal import Decimal
+import decimal
 from dateutil.parser import parse
 
 logger = singer.get_logger()
@@ -107,6 +107,13 @@ def flatten_key(k, parent_key, sep):
     return sep.join(inflected_key)
 
 
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return str(o)
+        return super(DecimalEncoder, self).default(o)
+
 def flatten_record(d, parent_key=[], sep='__'):
     items = []
     for k in sorted(d.keys()):
@@ -115,6 +122,6 @@ def flatten_record(d, parent_key=[], sep='__'):
         if isinstance(v, collections.MutableMapping):
             items.extend(flatten_record(v, parent_key + [k], sep=sep).items())
         else:
-            items.append((new_key, json.dumps(v) if type(v) is list else v))
+            items.append((new_key, json.dumps(v, cls=DecimalEncoder) if type(v) is list else v))
     return dict(items)
 

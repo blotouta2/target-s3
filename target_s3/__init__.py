@@ -9,7 +9,7 @@ import sys
 import tempfile
 from datetime import datetime
 from os import walk
-
+import decimal
 import pandas as pd
 import singer
 from jsonschema import Draft4Validator, FormatChecker
@@ -18,6 +18,13 @@ from target_s3 import s3
 from target_s3 import utils
 
 logger = singer.get_logger()
+
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return str(o)
+        return super(DecimalEncoder, self).default(o)
 
 
 def write_temp_pickle(data={}):
@@ -230,7 +237,7 @@ def persist_messages(messages, config, s3_client):
                 logger.info('creating file: {}'.format(filename))
 
             with open(filename, 'a') as f:
-                f.write(json.dumps(flattened_record))
+                f.write(json.dumps(flattened_record, cls=DecimalEncoder))
                 f.write('\n')
 
             state = None
