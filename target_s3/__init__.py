@@ -1,26 +1,17 @@
 #!/usr/bin/env python3
 
 import argparse
-import csv
-import gzip
 import io
 import json
 import os
-from os import walk
-import shutil
+import pickle
 import sys
 import tempfile
 from datetime import datetime
+from os import walk
 import pandas as pd
-import pyarrow as pa
-import itertools
-from io import StringIO
-from sys import getsizeof
-import pickle
-
 import singer
 from jsonschema import Draft4Validator, FormatChecker
-
 from target_s3 import s3
 from target_s3 import utils
 
@@ -88,8 +79,6 @@ def upload_to_s3(s3_client, s3_bucket, filename, stream, field_to_partition_by_t
         dir_path = os.path.dirname(os.path.realpath(filename))
         final_files_dir = os.path.join(dir_path, s3_bucket)
         final_files_dir = os.path.join(final_files_dir, stream)
-        insert_id_count = len(df[record_unique_field].unique())
-        logger.info('df size: {}, record_unique_field count: {}'.format(df.shape, insert_id_count))
 
         logger.info('final_files_dir: {}'.format(final_files_dir))
         df['idx_day'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).day
