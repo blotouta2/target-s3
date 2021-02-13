@@ -9,9 +9,11 @@ import sys
 import tempfile
 from datetime import datetime
 from os import walk
+
 import pandas as pd
 import singer
 from jsonschema import Draft4Validator, FormatChecker
+
 from target_s3 import s3
 from target_s3 import utils
 
@@ -81,9 +83,16 @@ def upload_to_s3(s3_client, s3_bucket, filename, stream, field_to_partition_by_t
         final_files_dir = os.path.join(final_files_dir, stream)
 
         logger.info('final_files_dir: {}'.format(final_files_dir))
-        df['idx_day'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).day
-        df['idx_month'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).month
-        df['idx_year'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).year
+
+        if field_to_partition_by_time and field_to_partition_by_time in df:
+            df['idx_day'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).day
+            df['idx_month'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).month
+            df['idx_year'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).year
+        else:
+            todayDate = datetime.now()
+            df['idx_day'] = todayDate.strftime('%d')
+            df['idx_month'] = todayDate.strftime('%m')
+            df['idx_year'] = todayDate.strftime('%Y')
 
     filename_sufix_map = {'snappy': 'snappy', 'gzip': 'gz', 'brotli': 'br'}
     if compression is None or compression.lower() == "none":
@@ -239,10 +248,10 @@ def persist_messages(messages, config, s3_client):
             key_properties[stream] = o['key_properties']
             filename = None
 
-            if config.get('field_to_partition_by_time') not in key_properties[stream]:
-                raise Exception("""field_to_partition_by_time '{}' is not in key_properties: {}""".format(
-                    config.get('field_to_partition_by_time'), key_properties[stream])
-                )
+            # if config.get('field_to_partition_by_time') not in key_properties[stream]:
+            # raise Exception("""field_to_partition_by_time '{}' is not in key_properties: {}""".format(
+            # config.get('field_to_partition_by_time'), key_properties[stream])
+            # )
 
         elif message_type == 'ACTIVATE_VERSION':
             logger.debug('ACTIVATE_VERSION message')
