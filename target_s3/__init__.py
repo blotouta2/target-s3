@@ -52,7 +52,6 @@ def upload_to_s3(s3_client, s3_bucket, filename, stream, field_to_partition_by_t
     final_files_dir = ''
     with open(filename, 'r') as f:
         data = f.read().splitlines()
-
         df = pd.DataFrame(data)
         df.columns = ['json_element']
         df = df['json_element'].apply(json.loads)
@@ -92,23 +91,19 @@ def upload_to_s3(s3_client, s3_bucket, filename, stream, field_to_partition_by_t
         logger.info('final_files_dir: {}'.format(final_files_dir))
 
         if field_to_partition_by_time and field_to_partition_by_time in df:
-            df['idx_day'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).day
-            df['idx_month'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).month
-            df['idx_year'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time])).year
+            df['etl_run_date'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time], format = '%Y-%m-%d'))
         else:
             todayDate = datetime.now()
-            df['idx_day'] = todayDate.strftime('%d')
-            df['idx_month'] = todayDate.strftime('%m')
-            df['idx_year'] = todayDate.strftime('%Y')
+            df['etl_run_date'] = todayDate.strftime('%Y-%m-%d')
 
     filename_sufix_map = {'snappy': 'snappy', 'gzip': 'gz', 'brotli': 'br'}
     if compression is None or compression.lower() == "none":
-        df.to_parquet(final_files_dir, index=True, compression=None,
-                      partition_cols=['idx_year', 'idx_month', 'idx_day'])
+        df.to_parquet(final_files_dir, engine='pyarrow', compression=None,
+                      partition_cols=['etl_run_date'])
     else:
         if compression in filename_sufix_map:
-            df.to_parquet(final_files_dir, index=False, compression=compression,
-                          partition_cols=['idx_year', 'idx_month', 'idx_day'])
+            df.to_parquet(final_files_dir, engine='pyarrow', compression=compression,
+                          partition_cols=['etl_run_date'])
         else:
             raise NotImplementedError(
                 """Compression type '{}' is not supported. Expected: {}""".format(compression,
@@ -143,7 +138,7 @@ def emit_state(state):
         sys.stdout.flush()
 
 
-def persist_messages(messages, config, s3_client):
+def persist_messages(messages, config, s3_client, do_timestamp_file=True):
     state = None
     schemas = {}
     key_properties = {}
@@ -153,9 +148,7 @@ def persist_messages(messages, config, s3_client):
     filenames = []
     file_size_counters = dict()
     file_count_counters = dict()
-    file_data = dict()
     filename = None
-    s3_path, s3_filename = None, None
     now = datetime.now().strftime('%Y%m%dT%H%M%S')
     max_file_size_mb = config.get('max_temp_file_size_mb', 1000)
     stream = None
@@ -164,6 +157,8 @@ def persist_messages(messages, config, s3_client):
         a = set()
         write_temp_pickle()
 
+    timestamp_file_part = '-' + datetime.now().strftime('%Y%m%dT%H%M%S') if do_timestamp_file else ''
+
     for message in messages:
         try:
             o = singer.parse_message(message).asdict()
@@ -171,11 +166,6 @@ def persist_messages(messages, config, s3_client):
             logger.error("Unable to parse:\n{}".format(message))
             raise
         message_type = o['type']
-        # if message_type != 'RECORD':
-        #     logger.info("{} - message: {}".format(message_type, o))
-
-        # if message_type not in message_types:
-        #     logger.info("{} - message: {}".format(message_type, o))
 
         if message_type == 'RECORD':
             if o['stream'] not in schemas:
@@ -201,40 +191,12 @@ def persist_messages(messages, config, s3_client):
 
             flattened_record = utils.flatten_record(record_to_load)
 
-            if filename is None:
-                filename = '{}.jsonl'.format(now)
-                filename = os.path.join(tempfile.gettempdir(), filename)
-                filename = os.path.expanduser(filename)
-                file_size_counters[filename] = 0
-                file_count_counters[filename] = file_count_counters.get(filename, 1)
+            filename = o['stream'] + timestamp_file_part + '.jsonl'
+            filename = os.path.join(tempfile.gettempdir(), filename)
+            filename = os.path.expanduser(filename)
 
-            full_s3_target = str(file_count_counters[filename]) + '_' + filename
-
-            if not (filename, full_s3_target) in filenames:
-                filenames.append((filename, full_s3_target))
-
-            file_size = os.path.getsize(filename) if os.path.isfile(filename) else 0
-            if file_size >> 20 > file_size_counters[filename] and file_size >> 20 % 100 == 0:
-                logger.info('file_size: {} MB, filename: {}'.format(round(file_size >> 20, 2), filename))
-                file_size_counters[filename] = file_size_counters.get(filename, 0) + 10
-
-            if file_size >> 20 > max_file_size_mb:
-                logger.info('Max file size reached: {}, dumping to s3...'.format(max_file_size_mb))
-
-                upload_to_s3(s3_client, config.get("s3_bucket"), filename, stream,
-                             config.get('field_to_partition_by_time'),
-                             config.get('record_unique_field'),
-                             config.get("compression"),
-                             config.get('encryption_type'),
-                             config.get('encryption_key'))
-                file_size = 0
-                file_count_counters[filename] = file_count_counters.get(filename, 1) + 1
-                if filename in headers:
-                    del headers[filename]
-
-            file_is_empty = file_size == 0
-            if file_is_empty:
-                logger.info('creating file: {}'.format(filename))
+            if not (filename, o['stream']) in filenames:
+                filenames.append((filename, o['stream']))
 
             with open(filename, 'a') as f:
                 f.write(json.dumps(flattened_record, cls=DecimalEncoder))
@@ -242,7 +204,7 @@ def persist_messages(messages, config, s3_client):
 
             state = None
         elif message_type == 'STATE':
-            logger.debug('Setting state to {}'.format(o['value']))
+            logger.info('Setting state to {}'.format(o['value']))
             state = o['value']
         elif message_type == 'SCHEMA':
             stream = o['stream']
@@ -255,18 +217,13 @@ def persist_messages(messages, config, s3_client):
             key_properties[stream] = o['key_properties']
             filename = None
 
-            # if config.get('field_to_partition_by_time') not in key_properties[stream]:
-            # raise Exception("""field_to_partition_by_time '{}' is not in key_properties: {}""".format(
-            # config.get('field_to_partition_by_time'), key_properties[stream])
-            # )
-
         elif message_type == 'ACTIVATE_VERSION':
             logger.debug('ACTIVATE_VERSION message')
         else:
             logger.warning("Unknown message type {} in message {}".format(o['type'], o))
 
     # Upload created CSV files to S3
-    for filename, s3_target in filenames:
+    for filename, stream in filenames:
         upload_to_s3(s3_client, config.get("s3_bucket"), filename, stream,
                      config.get('field_to_partition_by_time'),
                      config.get('record_unique_field'),
