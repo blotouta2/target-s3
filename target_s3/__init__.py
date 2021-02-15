@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import decimal
 import io
 import json
 import os
@@ -9,7 +10,7 @@ import sys
 import tempfile
 from datetime import datetime
 from os import walk
-import decimal
+
 import pandas as pd
 import singer
 from jsonschema import Draft4Validator, FormatChecker
@@ -45,7 +46,7 @@ def read_temp_pickle():
 
 
 # Upload created files to S3
-def upload_to_s3(s3_client, s3_bucket, filename, stream, field_to_partition_by_time,
+def upload_to_s3(s3_client, s3_bucket, source_name, filename, stream, field_to_partition_by_time,
                  record_unique_field, compression=None, encryption_type=None, encryption_key=None):
     data = None
     df = None
@@ -91,7 +92,7 @@ def upload_to_s3(s3_client, s3_bucket, filename, stream, field_to_partition_by_t
         logger.info('final_files_dir: {}'.format(final_files_dir))
 
         if field_to_partition_by_time and field_to_partition_by_time in df:
-            df['etl_run_date'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time], format = '%Y-%m-%d'))
+            df['etl_run_date'] = pd.DatetimeIndex(pd.to_datetime(df[field_to_partition_by_time], format='%Y-%m-%d'))
         else:
             todayDate = datetime.now()
             df['etl_run_date'] = todayDate.strftime('%Y-%m-%d')
@@ -118,7 +119,7 @@ def upload_to_s3(s3_client, s3_bucket, filename, stream, field_to_partition_by_t
             s3.upload_file(temp_file,
                            s3_client,
                            s3_bucket,
-                           s3_target,
+                           str(source_name + '/' if source_name else '') + s3_target,
                            encryption_type=encryption_type,
                            encryption_key=encryption_key)
 
@@ -224,7 +225,7 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
 
     # Upload created CSV files to S3
     for filename, stream in filenames:
-        upload_to_s3(s3_client, config.get("s3_bucket"), filename, stream,
+        upload_to_s3(s3_client, config.get("s3_bucket"), config.get("source_name"), filename, stream,
                      config.get('field_to_partition_by_time'),
                      config.get('record_unique_field'),
                      config.get("compression"),
@@ -251,7 +252,8 @@ def main():
         sys.exit(1)
 
     s3_client = s3.create_client(config)
-
+    logger.info("Configuration ------")
+    logger.info(config)
     input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
     state = persist_messages(input_messages, config, s3_client)
 
