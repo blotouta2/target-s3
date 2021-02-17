@@ -225,7 +225,7 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
 
     # Upload created CSV files to S3
     for filename, stream in filenames:
-        upload_to_s3(s3_client, config.get("s3_bucket"), config.get("source_name"), filename, stream,
+        upload_to_s3(s3_client, config.get("s3_bucket"), os.environ["TARGET_S3_SOURCE_NAME"], filename, stream,
                      config.get('field_to_partition_by_time'),
                      config.get('record_unique_field'),
                      config.get("compression"),
