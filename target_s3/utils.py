@@ -114,14 +114,26 @@ class DecimalEncoder(json.JSONEncoder):
             return str(o)
         return super(DecimalEncoder, self).default(o)
 
-def flatten_record(d, parent_key=[], sep='__'):
-    items = []
-    for k in sorted(d.keys()):
-        v = d[k]
-        new_key = flatten_key(k, parent_key, sep)
-        if isinstance(v, collections.MutableMapping):
-            items.extend(flatten_record(v, parent_key + [k], sep=sep).items())
-        else:
-            items.append((new_key, json.dumps(v, cls=DecimalEncoder) if type(v) is list else v))
-    return dict(items)
+items = dict()
+    
+def flatten_record(d, parent_key=[], sep='__', key = 'default'):
 
+    if not d:
+    	 items[key] = d
+            
+    elif isinstance(d, dict):
+        for k in sorted(d.keys()):
+            v = d[k]
+            new_key = flatten_key(k, parent_key, sep)
+            #items.extend(flatten_record(v, parent_key + [k], sep=sep, key=new_key).items())
+            flatten_record(v, parent_key + [k], sep=sep, key=new_key)
+    elif isinstance(d, (list, set, tuple)):
+        for index, item in enumerate(d):
+            new_key = flatten_key(key, parent_key, sep)
+            #items.extend(flatten_record(item, parent_key, sep=sep, key=new_key).items())
+            flatten_record(item, parent_key, sep=sep, key=new_key)
+    else:
+        items[key] =  json.dumps(d, cls=DecimalEncoder) if type(d) is list else d
+    
+    #print(items)
+    return dict(items)
