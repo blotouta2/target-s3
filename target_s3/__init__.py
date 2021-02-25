@@ -213,9 +213,10 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
                              config.get("compression"),
                              config.get('encryption_type'),
                              config.get('encryption_key'))
-                file_size = 0
-                filename = None
                 filenames.remove((filename, o['stream']))
+                filename = None
+                file_size = 0
+
             state = None
         elif message_type == 'STATE':
             logger.info('Setting state to {}'.format(o['value']))
