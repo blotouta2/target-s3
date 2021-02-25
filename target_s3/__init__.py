@@ -158,8 +158,6 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
         a = set()
         write_temp_pickle()
 
-    timestamp_file_part = '-' + datetime.now().strftime('%Y%m%dT%H%M%S') if do_timestamp_file else ''
-
     for message in messages:
         try:
             o = singer.parse_message(message).asdict()
@@ -192,9 +190,11 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
 
             flattened_record = utils.flatten_record(record_to_load)
 
-            filename = o['stream'] + timestamp_file_part + '.jsonl'
-            filename = os.path.join(tempfile.gettempdir(), filename)
-            filename = os.path.expanduser(filename)
+            if filename is None:
+                timestamp_file_part = '-' + datetime.now().strftime('%Y%m%dT%H%M%S') if do_timestamp_file else ''
+                filename = o['stream'] + timestamp_file_part + '.jsonl'
+                filename = os.path.join(tempfile.gettempdir(), filename)
+                filename = os.path.expanduser(filename)
 
             if not (filename, o['stream']) in filenames:
                 filenames.append((filename, o['stream']))
@@ -203,6 +203,19 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
                 f.write(json.dumps(flattened_record, cls=DecimalEncoder))
                 f.write('\n')
 
+            file_size = os.path.getsize(filename) if os.path.isfile(filename) else 0
+            logger.info("File Size for " + str(filename) + "is : " + str(file_size))
+            if file_size > 5:
+                logger.info('file_size: {} MB, filename: {}'.format(round(file_size >> 20, 2), filename))
+                upload_to_s3(s3_client, config.get("s3_bucket"), os.environ["TARGET_S3_SOURCE_NAME"], filename, o['stream'],
+                             config.get('field_to_partition_by_time'),
+                             config.get('record_unique_field'),
+                             config.get("compression"),
+                             config.get('encryption_type'),
+                             config.get('encryption_key'))
+                file_size = 0
+                filename = None
+                filenames.remove((filename, o['stream']))
             state = None
         elif message_type == 'STATE':
             logger.info('Setting state to {}'.format(o['value']))
@@ -252,8 +265,6 @@ def main():
         sys.exit(1)
 
     s3_client = s3.create_client(config)
-    logger.info("Configuration ------")
-    logger.info(config)
     input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
     state = persist_messages(input_messages, config, s3_client)
 
