@@ -143,14 +143,10 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
     state = None
     schemas = {}
     key_properties = {}
-    headers = {}
     validators = {}
 
     filenames = []
-    file_size_counters = dict()
-    file_count_counters = dict()
     filename = None
-    now = datetime.now().strftime('%Y%m%dT%H%M%S')
     max_file_size_mb = config.get('max_temp_file_size_mb', 1000)
     stream = None
 
@@ -204,10 +200,10 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
                 f.write('\n')
 
             file_size = os.path.getsize(filename) if os.path.isfile(filename) else 0
-            logger.info("File Size for " + str(filename) + "is : " + str(file_size))
-            if file_size > 5:
+            if file_size >> 20 > max_file_size_mb:
                 logger.info('file_size: {} MB, filename: {}'.format(round(file_size >> 20, 2), filename))
-                upload_to_s3(s3_client, config.get("s3_bucket"), os.environ["TARGET_S3_SOURCE_NAME"], filename, o['stream'],
+                upload_to_s3(s3_client, config.get("s3_bucket"), os.environ["TARGET_S3_SOURCE_NAME"], filename,
+                             o['stream'],
                              config.get('field_to_partition_by_time'),
                              config.get('record_unique_field'),
                              config.get("compression"),
