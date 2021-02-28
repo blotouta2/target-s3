@@ -140,6 +140,7 @@ def emit_state(state):
 
 
 def persist_messages(messages, config, s3_client, do_timestamp_file=True):
+    logger.info('persist_messages')
     state = None
     schemas = {}
     key_properties = {}
@@ -147,7 +148,8 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
 
     filenames = []
     filename = None
-    max_file_size_mb = config.get('max_temp_file_size_mb', 1000)
+    timestamp_file_part = '-' + datetime.now().strftime('%Y%m%dT%H%M%S') if do_timestamp_file else ''
+    max_file_size_mb = config.get('max_temp_file_size_mb', 100)
     stream = None
 
     if config.get('record_unique_field'):
@@ -185,12 +187,9 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
                 record_to_load = utils.remove_metadata_values_from_record(o)
 
             flattened_record = utils.flatten_record(record_to_load)
-
-            if filename is None:
-                timestamp_file_part = '-' + datetime.now().strftime('%Y%m%dT%H%M%S') if do_timestamp_file else ''
-                filename = o['stream'] + timestamp_file_part + '.jsonl'
-                filename = os.path.join(tempfile.gettempdir(), filename)
-                filename = os.path.expanduser(filename)
+            filename = o['stream'] + timestamp_file_part + '.jsonl'
+            filename = os.path.join(tempfile.gettempdir(), filename)
+            filename = os.path.expanduser(filename)
 
             if not (filename, o['stream']) in filenames:
                 filenames.append((filename, o['stream']))
@@ -210,9 +209,6 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
                              config.get('encryption_type'),
                              config.get('encryption_key'))
                 filenames.remove((filename, o['stream']))
-                filename = None
-                file_size = 0
-
             state = None
         elif message_type == 'STATE':
             logger.info('Setting state to {}'.format(o['value']))
@@ -226,8 +222,6 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
             schema = utils.float_to_decimal(o['schema'])
             validators[stream] = Draft4Validator(schema, format_checker=FormatChecker())
             key_properties[stream] = o['key_properties']
-            filename = None
-
         elif message_type == 'ACTIVATE_VERSION':
             logger.debug('ACTIVATE_VERSION message')
         else:
