@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-
-from datetime import datetime
-import time
-import singer
+import decimal
 import json
 import re
-import collections
-import inflection
-import itertools
+import time
+from datetime import datetime
 from decimal import Decimal
-import decimal
-from dateutil.parser import parse
+
+import inflection
+import singer
 
 logger = singer.get_logger()
 
@@ -49,13 +46,16 @@ def add_metadata_columns_to_schema(schema_message):
     Metadata columns gives debugrmation about data injections
     """
     extended_schema_message = schema_message
-    extended_schema_message['schema']['properties']['_sdc_batched_at'] = { 'type': ['null', 'string'], 'format': 'date-time' }
-    extended_schema_message['schema']['properties']['_sdc_deleted_at'] = { 'type': ['null', 'string'] }
-    extended_schema_message['schema']['properties']['_sdc_extracted_at'] = { 'type': ['null', 'string'], 'format': 'date-time' }
-    extended_schema_message['schema']['properties']['_sdc_primary_key'] = {'type': ['null', 'string'] }
-    extended_schema_message['schema']['properties']['_sdc_received_at'] = { 'type': ['null', 'string'], 'format': 'date-time' }
-    extended_schema_message['schema']['properties']['_sdc_sequence'] = {'type': ['integer'] }
-    extended_schema_message['schema']['properties']['_sdc_table_version'] = {'type': ['null', 'string'] }
+    extended_schema_message['schema']['properties']['_sdc_batched_at'] = {'type': ['null', 'string'],
+                                                                          'format': 'date-time'}
+    extended_schema_message['schema']['properties']['_sdc_deleted_at'] = {'type': ['null', 'string']}
+    extended_schema_message['schema']['properties']['_sdc_extracted_at'] = {'type': ['null', 'string'],
+                                                                            'format': 'date-time'}
+    extended_schema_message['schema']['properties']['_sdc_primary_key'] = {'type': ['null', 'string']}
+    extended_schema_message['schema']['properties']['_sdc_received_at'] = {'type': ['null', 'string'],
+                                                                           'format': 'date-time'}
+    extended_schema_message['schema']['properties']['_sdc_sequence'] = {'type': ['integer']}
+    extended_schema_message['schema']['properties']['_sdc_table_version'] = {'type': ['null', 'string']}
 
     return extended_schema_message
 
@@ -107,33 +107,32 @@ def flatten_key(k, parent_key, sep):
     return sep.join(inflected_key)
 
 
-
 class DecimalEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, decimal.Decimal):
             return str(o)
         return super(DecimalEncoder, self).default(o)
 
-items = dict()
-    
-def flatten_record(d, parent_key=[], sep='__', key = 'default'):
 
-    if not d:
-    	 items[key] = d
-            
-    elif isinstance(d, dict):
-        for k in sorted(d.keys()):
-            v = d[k]
-            new_key = flatten_key(k, parent_key, sep)
-            #items.extend(flatten_record(v, parent_key + [k], sep=sep, key=new_key).items())
-            flatten_record(v, parent_key + [k], sep=sep, key=new_key)
-    elif isinstance(d, (list, set, tuple)):
-        for index, item in enumerate(d):
-            new_key = flatten_key(key, parent_key, sep)
-            #items.extend(flatten_record(item, parent_key, sep=sep, key=new_key).items())
-            flatten_record(item, parent_key, sep=sep, key=new_key)
-    else:
-        items[key] =  json.dumps(d, cls=DecimalEncoder) if type(d) is list else d
-    
-    #print(items)
-    return dict(items)
+def flatten_record(d):
+    items = dict()
+
+    def flatten_inner_record(d, parent_key=[], sep='__', key='default'):
+        if not d:
+            items[key] = d
+
+        elif isinstance(d, dict):
+            for k in sorted(d.keys()):
+                v = d[k]
+                new_key = flatten_key(k, parent_key, sep)
+                flatten_inner_record(v, parent_key + [k], sep=sep, key=new_key)
+        elif isinstance(d, (list, set, tuple)):
+            for index, item in enumerate(d):
+                new_key = flatten_key(key, parent_key, sep)
+                flatten_inner_record(item, parent_key, sep=sep, key=new_key)
+        else:
+            items[key] = json.dumps(d, cls=DecimalEncoder) if type(d) is list else d
+
+        return dict(items)
+
+    return flatten_inner_record(d)
