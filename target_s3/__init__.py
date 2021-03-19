@@ -192,7 +192,7 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
             else:
                 record_to_load = utils.remove_metadata_values_from_record(o)
 
-            flattened_record = utils.flatten_record(record_to_load)
+            flattened_record = utils.flatten(record_to_load)
             filename = o['stream'] + timestamp_file_part + '.jsonl'
             filename = os.path.join(tempfile.gettempdir(), filename)
             filename = os.path.expanduser(filename)
