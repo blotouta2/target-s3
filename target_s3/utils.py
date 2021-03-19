@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import collections
 import decimal
 import json
 import re
@@ -114,25 +115,29 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(o)
 
 
-def flatten_record(d):
-    items = dict()
+def flatten(dictionary, parent_key=False, separator='_'):
+    """
+    Turn a nested dictionary into a flattened dictionary
+    :param dictionary: The dictionary to flatten
+    :param parent_key: The string to prepend to dictionary's keys
+    :param separator: The string used to separate flattened keys
+    :return: A flattened dictionary
+    """
 
-    def flatten_inner_record(d, parent_key=[], sep='__', key='default'):
-        if not d:
-            items[key] = d
-
-        elif isinstance(d, dict):
-            for k in sorted(d.keys()):
-                v = d[k]
-                new_key = flatten_key(k, parent_key, sep)
-                flatten_inner_record(v, parent_key + [k], sep=sep, key=new_key)
-        elif isinstance(d, (list, set, tuple)):
-            for index, item in enumerate(d):
-                new_key = flatten_key(key, parent_key, sep)
-                flatten_inner_record(item, parent_key, sep=sep, key=new_key)
+    items = []
+    for key, value in dictionary.items():
+        new_key = str(parent_key) + separator + key if parent_key else key
+        if isinstance(value, collections.MutableMapping):
+            if not value.items():
+                items.append((new_key, None))
+            else:
+                items.extend(flatten(value, new_key, separator).items())
+        elif isinstance(value, list):
+            if len(value):
+                for k, v in enumerate(value):
+                    items.extend(flatten({str(k): v}, new_key).items())
+            else:
+                items.append((new_key, None))
         else:
-            items[key] = json.dumps(d, cls=DecimalEncoder) if type(d) is list else d
-
-        return dict(items)
-
-    return flatten_inner_record(d)
+            items.append((new_key, value))
+    return dict(items)
