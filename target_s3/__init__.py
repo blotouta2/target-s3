@@ -57,6 +57,7 @@ def upload_to_s3(s3_client, s3_bucket, source_name, filename, stream, field_to_p
         df.columns = ['json_element']
         df = df['json_element'].apply(json.loads)
         df = pd.json_normalize(df)
+        df = df.where(pd.notnull(df), None)
         logger.info('df orginal size: {}'.format(df.shape))
 
     if df is not None:
