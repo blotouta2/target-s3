@@ -117,8 +117,13 @@ def flatten(dictionary, parent_key=False, separator='_'):
                 items.extend(flatten(value, new_key, separator).items())
         elif isinstance(value, list):
             if len(value):
+                listCollection = []
                 for k, v in enumerate(value):
-                    items.extend(flatten({str(k): v}, new_key).items())
+                    if isinstance(v, collections.MutableMapping):
+                        items.extend(flatten({str(k): v}, new_key).items())
+                    else:
+                        listCollection.append(v)
+                if len(listCollection): items.append((new_key, listCollection))
             else:
                 items.append((new_key, None))
         else:
