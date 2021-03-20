@@ -7,7 +7,6 @@ import time
 from datetime import datetime
 from decimal import Decimal
 
-import inflection
 import singer
 
 logger = singer.get_logger()
@@ -92,22 +91,6 @@ def remove_metadata_values_from_record(record_message):
     return cleaned_record
 
 
-# pylint: disable=unnecessary-comprehension
-def flatten_key(k, parent_key, sep):
-    """
-    """
-    full_key = parent_key + [k]
-    inflected_key = [n for n in full_key]
-    reducer_index = 0
-    while len(sep.join(inflected_key)) >= 255 and reducer_index < len(inflected_key):
-        reduced_key = re.sub(r'[a-z]', '', inflection.camelize(inflected_key[reducer_index]))
-        inflected_key[reducer_index] = \
-            (reduced_key if len(reduced_key) > 1 else inflected_key[reducer_index][0:3]).lower()
-        reducer_index += 1
-
-    return sep.join(inflected_key)
-
-
 class DecimalEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, decimal.Decimal):
@@ -141,3 +124,8 @@ def flatten(dictionary, parent_key=False, separator='_'):
         else:
             items.append((new_key, value))
     return dict(items)
+
+
+def camel_to_snake(name):
+    name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
