@@ -98,26 +98,26 @@ def upload_to_s3(s3_client, s3_bucket, source_name, filename, stream, field_to_p
             todayDate = datetime.now()
             df['etl_run_date'] = todayDate.strftime('%Y-%m-%d')
 
-    for col in df.columns:
-        weird = (df[[col]].applymap(type) != df[[col]].iloc[0].apply(type)).any(axis=1)
-        if len(df[weird]) > 0:
-            logger.info("Columns which are explicitly casted to String Type : " + str(col))
-            df[col] = df[col].astype(str)
+        for col in df.columns:
+            df.rename(columns={col: utils.camel_to_snake(col)}, inplace=True)
 
-    filename_sufix_map = {'snappy': 'snappy', 'gzip': 'gz', 'brotli': 'br'}
-    if compression is None or compression.lower() == "none":
-        df.to_parquet(final_files_dir, engine='pyarrow', compression=None,
-                      partition_cols=['etl_run_date'])
-    else:
-        if compression in filename_sufix_map:
-            df.to_parquet(final_files_dir, engine='pyarrow', compression=compression,
+        for col in df.columns:
+            weird = (df[[col]].applymap(type) != df[[col]].iloc[0].apply(type)).any(axis=1)
+            if len(df[weird]) > 0:
+                logger.info("Columns which are explicitly casted to String Type : " + str(col))
+                df[col] = df[col].astype(str)
+
+        filename_sufix_map = {'snappy': 'snappy', 'gzip': 'gz', 'brotli': 'br'}
+        if compression is None or compression.lower() == "none":
+            df.to_parquet(final_files_dir, engine='pyarrow', compression=None,
                           partition_cols=['etl_run_date'])
         else:
-            raise NotImplementedError(
-                """Compression type '{}' is not supported. Expected: {}""".format(compression,
-                                                                                  filename_sufix_map.keys())
-            )
-
+            if compression in filename_sufix_map:
+                df.to_parquet(final_files_dir, engine='pyarrow', compression=compression,
+                              partition_cols=['etl_run_date'])
+            else:
+                raise NotImplementedError("""Compression type '{}' is not supported. Expected: {}""".format(compression,
+                                                                                                            filename_sufix_map.keys()))
     for (dirpath, dirnames, filenames) in walk(final_files_dir):
         for fn in filenames:
             temp_file = os.path.join(dirpath, fn)
