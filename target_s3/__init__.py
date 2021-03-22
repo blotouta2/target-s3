@@ -105,9 +105,17 @@ def upload_to_s3(s3_client, s3_bucket, source_name, filename, stream, field_to_p
 
         for col in df.columns:
             weird = (df[[col]].applymap(type) != df[[col]].iloc[0].apply(type)).any(axis=1)
-            if len(df[weird]) > 0:
+            try:
+                coltype = type(df[col].dropna().iloc[0])
+            except IndexError as e:
+                coltype = str
+
+            if len(df[weird]) > 0 and coltype != list:
                 logger.info("Columns which are explicitly casted to String Type : " + str(col))
                 df[col] = df[col].astype(str)
+
+            if coltype == list:
+                logger.info("Column is of List type : " + str(col))
 
         df = df.replace({'None': None})
         df = df.replace({'nan': None})
