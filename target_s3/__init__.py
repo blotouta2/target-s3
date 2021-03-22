@@ -101,11 +101,17 @@ def upload_to_s3(s3_client, s3_bucket, source_name, filename, stream, field_to_p
         for col in df.columns:
             df.rename(columns={col: utils.camel_to_snake(col)}, inplace=True)
 
+        df = df.where(pd.notnull(df), None)
+
         for col in df.columns:
             weird = (df[[col]].applymap(type) != df[[col]].iloc[0].apply(type)).any(axis=1)
             if len(df[weird]) > 0:
                 logger.info("Columns which are explicitly casted to String Type : " + str(col))
                 df[col] = df[col].astype(str)
+
+        df = df.replace({'None': None})
+        df = df.replace({'nan': None})
+        df = df.where(pd.notnull(df), None)
 
         filename_sufix_map = {'snappy': 'snappy', 'gzip': 'gz', 'brotli': 'br'}
         if compression is None or compression.lower() == "none":
@@ -156,7 +162,7 @@ def persist_messages(messages, config, s3_client, do_timestamp_file=True):
     filenames = []
     filename = None
     timestamp_file_part = '-' + datetime.now().strftime('%Y%m%dT%H%M%S') if do_timestamp_file else ''
-    max_file_size_mb = config.get('max_temp_file_size_mb', 100)
+    max_file_size_mb = config.get('max_temp_file_size_mb', 50)
     stream = None
 
     if config.get('record_unique_field'):
