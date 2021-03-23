@@ -97,6 +97,7 @@ def upload_to_s3(s3_client, s3_bucket, source_name, filename, stream, field_to_p
         else:
             todayDate = datetime.now()
             df['etl_run_date'] = todayDate.strftime('%Y-%m-%d')
+            df['etl_run_datetime'] = todayDate.strftime('%Y-%m-%d %H:%M:%S')
 
         for col in df.columns:
             df.rename(columns={col: utils.camel_to_snake(col)}, inplace=True)
@@ -120,6 +121,7 @@ def upload_to_s3(s3_client, s3_bucket, source_name, filename, stream, field_to_p
         df = df.replace({'None': None})
         df = df.replace({'nan': None})
         df = df.where(pd.notnull(df), None)
+        df = df.dropna(axis=1, how='all')
 
         filename_sufix_map = {'snappy': 'snappy', 'gzip': 'gz', 'brotli': 'br'}
         if compression is None or compression.lower() == "none":
