@@ -272,7 +272,8 @@ def main():
             config = json.load(input_json)
     else:
         config = {}
-
+    
+    logger.info('config info: {}'.format(config))
     config_errors = utils.validate_config(config)
     if len(config_errors) > 0:
         logger.error("Invalid configuration:\n   * {}".format('\n   * '.join(config_errors)))
